@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "functions": {
+    "api/boxscore.js": {
+      "runtime": "@vercel/node@3.0.7"
+    }
+  }
+}
