@@ -394,9 +394,9 @@ function drawStats(W,H,preview){
     const sc=W/1080,PAD=Math.round(54*sc);
     const q=document.getElementById('quarter').value,rival=(document.getElementById('rival').value||'RIVAL').toUpperCase();
     const sb=String(document.getElementById('sb').value||'—'),sr=String(document.getElementById('sr').value||'—');
-    const ql=quarterLabel(q),qFs=Math.round((ql.length>6?68:100)*sc);
+    const ql=quarterLabel(q),qFs=Math.round(110*sc);
     ctx.font='bold '+qFs+'px "Bebas Neue",sans-serif';ctx.fillStyle='#E03A3E';ctx.textAlign='left';ctx.fillText(ql,PAD+10,PAD+qFs*0.92);
-    const sFs=Math.round(88*sc),sepFs=Math.round(56*sc);
+    const sFs=Math.round(108*sc),sepFs=Math.round(68*sc);
     ctx.font='bold '+sFs+'px "Bebas Neue",sans-serif';
     const sbW=ctx.measureText(sb).width,srW=ctx.measureText(sr).width;
     ctx.font='bold '+sepFs+'px "Bebas Neue",sans-serif';const sep=' · ',sepW=ctx.measureText(sep).width;
@@ -404,8 +404,8 @@ function drawStats(W,H,preview){
     ctx.font='bold '+sFs+'px "Bebas Neue",sans-serif';ctx.fillStyle='#fff';ctx.textAlign='left';ctx.fillText(sb,sX,sY);
     ctx.font='bold '+sepFs+'px "Bebas Neue",sans-serif';ctx.fillStyle='rgba(255,255,255,0.22)';ctx.fillText(sep,sX+sbW,sY-Math.round(4*sc));
     ctx.font='bold '+sFs+'px "Bebas Neue",sans-serif';ctx.fillStyle='rgba(255,255,255,0.38)';ctx.fillText(sr,sX+sbW+sepW,sY);
-    ctx.font=Math.round(32*sc)+'px "Bebas Neue",sans-serif';ctx.fillStyle='rgba(255,255,255,0.38)';ctx.textAlign='right';ctx.fillText('vs '+rival,W-PAD,sY+Math.round(38*sc));
-    const headerH=Math.round(H*(H>1080?0.14:0.17)),divY=PAD+headerH;
+    ctx.font=Math.round(38*sc)+'px "Bebas Neue",sans-serif';ctx.fillStyle='rgba(255,255,255,0.38)';ctx.textAlign='right';ctx.fillText('vs '+rival,W-PAD,sY+Math.round(46*sc));
+    const headerH=Math.round(H*(H>1080?0.18:0.22)),divY=PAD+headerH;
     ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=Math.round(1.5*sc);ctx.beginPath();ctx.moveTo(PAD,divY);ctx.lineTo(W-PAD,divY);ctx.stroke();
     const logoH=Math.round(60*sc),lW=logoImg.width>0?logoImg.width*(logoH/logoImg.height):logoH,lY=H-Math.round(28*sc)-logoH;
     const totH=teamTotals?Math.round(52*sc):0,totY=lY-totH-Math.round(10*sc);
