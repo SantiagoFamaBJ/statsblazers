@@ -291,6 +291,15 @@ function loadConfig(){
 }
 function saveConfig(c){localStorage.setItem('baConfig5',JSON.stringify(c));}
 let CONFIG=loadConfig();
+function registerCustomEmojis(){
+  CONFIG.players.forEach((p,i)=>{
+    if(!p.img)return;
+    if(!p.key||!EMOJI_IMGS[p.key])p.key='c_'+i+'_'+(p.last||'x').toLowerCase().replace(/[^a-z0-9]/g,'');
+    if(!_eCache[p.key]||_eCache[p.key]._src!==p.img){const im=new Image();im.src=p.img;im._src=p.img;_eCache[p.key]=im;}
+    if(p.last&&p.last.trim())EMOJI_KEY_MAP[p.last.trim()]=p.key;
+  });
+}
+registerCustomEmojis();
 
 function formatMin(player){
   const s=player.statistics;
@@ -721,9 +730,28 @@ function renderAdminPlayers(){
   const list=document.getElementById('adminPlayersList');list.innerHTML='';
   CONFIG.players.forEach((p,i)=>{
     const row=document.createElement('div');row.className='a-player-row';
-    row.innerHTML=`<input type="text" value="${p.last||''}" placeholder="Apellido" onchange="CONFIG.players[${i}].last=this.value;saveConfig(CONFIG);initPlayersGrid()">${(p.key&&EMOJI_IMGS[p.key])?`<img src="${EMOJI_IMGS[p.key]}" style="width:30px;height:30px;object-fit:contain;margin:auto;display:block">`:`<input type="text" value="${p.emoji||''}" placeholder="🏀" onchange="CONFIG.players[${i}].emoji=this.value;saveConfig(CONFIG)" style="text-align:center">`}<input type="text" value="${p.num||''}" placeholder="#" onchange="CONFIG.players[${i}].num=this.value;saveConfig(CONFIG);initPlayersGrid()" style="text-align:center"><button class="btn-remove" onclick="removeAdminPlayer(${i})">✕</button>`;
+    row.innerHTML=`<input type="text" value="${p.last||''}" placeholder="Apellido" onchange="CONFIG.players[${i}].last=this.value;registerCustomEmojis();saveConfig(CONFIG);initPlayersGrid()"><label style="display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px dashed #333;border-radius:2px;min-height:38px" title="Subir foto del emoji">${(p.img||(p.key&&EMOJI_IMGS[p.key]))?`<img src="${p.img||EMOJI_IMGS[p.key]}" style="width:30px;height:30px;object-fit:contain">`:'<span style="font-size:.6rem;color:#888;letter-spacing:1px">📷 FOTO</span>'}<input type="file" accept="image/*" style="display:none" onchange="uploadEmoji(${i},this)"></label><input type="text" value="${p.num||''}" placeholder="#" onchange="CONFIG.players[${i}].num=this.value;saveConfig(CONFIG);initPlayersGrid()" style="text-align:center"><button class="btn-remove" onclick="removeAdminPlayer(${i})">✕</button>`;
     list.appendChild(row);
   });
+}
+function uploadEmoji(i,inp){
+  const f=inp.files&&inp.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=e=>{const im=new Image();im.onload=()=>{
+    const S=128,c=document.createElement('canvas');c.width=c.height=S;const x=c.getContext('2d');
+    const k=Math.min(S/im.width,S/im.height),w=im.width*k,h=im.height*k;
+    x.drawImage(im,(S-w)/2,(S-h)/2,w,h);
+    // sacar fondo negro conectado a los bordes
+    const d=x.getImageData(0,0,S,S),a=d.data,dark=j=>a[j+3]>200&&Math.max(a[j],a[j+1],a[j+2])<45;
+    const seen=new Uint8Array(S*S),q=[];
+    const push=(px,py)=>{if(px<0||py<0||px>=S||py>=S)return;const n=py*S+px;if(seen[n])return;if(!dark(n*4))return;seen[n]=1;q.push(n);};
+    for(let t=0;t<S;t++){push(t,0);push(t,S-1);push(0,t);push(S-1,t);}
+    while(q.length){const n=q.pop(),px=n%S,py=(n/S)|0;a[n*4+3]=0;push(px+1,py);push(px-1,py);push(px,py+1);push(px,py-1);}
+    x.putImageData(d,0,0);
+    CONFIG.players[i].img=c.toDataURL('image/png');
+    registerCustomEmojis();saveConfig(CONFIG);renderAdminPlayers();initPlayersGrid();
+  };im.src=e.target.result;};
+  rd.readAsDataURL(f);
 }
 function addAdminPlayer(){CONFIG.players.push({full:'',last:'',emoji:'🏀',num:''});saveConfig(CONFIG);renderAdminPlayers();initPlayersGrid();}
 function removeAdminPlayer(i){CONFIG.players.splice(i,1);saveConfig(CONFIG);renderAdminPlayers();initPlayersGrid();}
