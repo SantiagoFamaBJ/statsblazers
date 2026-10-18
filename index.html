@@ -337,7 +337,7 @@ function showPage(id,btn){
 async function runStats(){
   const url=document.getElementById('nbaLink').value.trim();
   if(!url){showErr('Pegá el link del partido');return;}
-  const gameId=url.match(/(\d{10})/)?.[1];
+  const gameId=url.match(/gameId[\/=](\d+)/)?.[1]||url.match(/(\d{9,10})/)?.[1];
   if(!gameId){showErr('No encontré el ID del partido');return;}
   const quarter=document.getElementById('quarter').value;
   document.getElementById('genBtn').disabled=true;
@@ -601,7 +601,7 @@ let jugNbaData=null;
 async function loadJugadores(){
   const url=document.getElementById('jugLink').value.trim();
   if(!url){showErr('Pegá el link del partido','jugErr');return;}
-  const gameId=url.match(/(\d{10})/)?.[1];
+  const gameId=url.match(/gameId[\/=](\d+)/)?.[1]||url.match(/(\d{9,10})/)?.[1];
   if(!gameId){showErr('No encontré el ID','jugErr');return;}
   document.getElementById('jugLoadBtn').disabled=true;
   document.getElementById('jugLoader').style.display='block';
