@@ -150,7 +150,8 @@ async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-store');
   try {
-    const id = await findEventId();
+    const q = String((req.query && req.query.gameId) || '');
+    const id = /^\d{9}$/.test(q) ? q : await findEventId(); // ID de ESPN directo, o búsqueda automática
     if (!id) return res.status(404).json({ error: 'No encontré partido de Portland (hoy/últimos días).' });
     const sum = await getJson(`${BASE}/summary?event=${id}`);
     if (!sum.boxscore || !(sum.boxscore.players || []).length)
