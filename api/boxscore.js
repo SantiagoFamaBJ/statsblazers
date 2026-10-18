@@ -1,48 +1,158 @@
-module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+// Adaptador ESPN -> formato NBA liveData (el que ya lee index.html).
+// NBA.com bloquea con Akamai, ESPN es público y gratis.
+const BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
+const TRI = { GS: 'GSW', NY: 'NYK', SA: 'SAS', NO: 'NOP', UTAH: 'UTA', WSH: 'WAS' };
+const tri = (a) => TRI[a] || a;
 
-  const { gameId } = req.query;
-  if (!gameId) return res.status(400).json({ error: 'gameId requerido' });
-
-  const targetUrl = `https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${gameId}.json`;
-
-  const commonHeaders = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'Accept': 'application/json, text/plain, */*',
-    'Referer': 'https://www.nba.com/',
-    'Origin': 'https://www.nba.com'
-  };
-
-  // Attempt 1: direct fetch
-  try {
-    const direct = await fetch(targetUrl, { headers: commonHeaders });
-    if (direct.ok) {
-      const data = await direct.json();
-      return res.status(200).json(data);
-    }
-  } catch (e) {}
-
-  // Attempt 2: via public CORS proxy (allorigins) - bypasses IP-based blocking
-  try {
-    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(targetUrl);
-    const proxied = await fetch(proxyUrl);
-    if (proxied.ok) {
-      const data = await proxied.json();
-      return res.status(200).json(data);
-    }
-  } catch (e) {}
-
-  // Attempt 3: via corsproxy.io
-  try {
-    const proxyUrl2 = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
-    const proxied2 = await fetch(proxyUrl2, { headers: commonHeaders });
-    if (proxied2.ok) {
-      const data = await proxied2.json();
-      return res.status(200).json(data);
-    }
-  } catch (e) {}
-
-  return res.status(500).json({ error: 'Partido no encontrado o NBA.com bloqueó el acceso. Probá de nuevo en unos minutos.' });
+async function getJson(url) {
+  const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' } });
+  if (!r.ok) throw new Error('ESPN HTTP ' + r.status);
+  return r.json();
 }
+
+const ymd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
+
+function isPor(ev) {
+  const comp = (ev.competitions || [])[0];
+  return comp && (comp.competitors || []).some((c) => c.team && c.team.abbreviation === 'POR');
+}
+
+function pick(events) {
+  const por = events.filter(isPor);
+  if (!por.length) return null;
+  const live = por.find((e) => e.status && e.status.type && e.status.type.state === 'in');
+  if (live) return live;
+  const done = por.filter((e) => e.status && e.status.type && e.status.type.state === 'post');
+  done.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return done[0] || por[0];
+}
+
+async function findEventId() {
+  const now = Date.now();
+  const from = ymd(new Date(now - 3 * 864e5));
+  const to = ymd(new Date(now + 864e5));
+  try {
+    const sb = await getJson(`${BASE}/scoreboard?dates=${from}-${to}&limit=100`);
+    const ev = pick(sb.events || []);
+    if (ev) return ev.id;
+  } catch (e) { /* sigue al schedule */ }
+  const sch = await getJson(`${BASE}/teams/por/schedule`);
+  const evs = (sch.events || []).filter((e) => {
+    const st = e.competitions && e.competitions[0] && e.competitions[0].status;
+    const state = st && st.type && st.type.state;
+    return state === 'in' || state === 'post';
+  });
+  evs.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return evs[0] ? evs[0].id : null;
+}
+
+const num = (v) => {
+  const n = parseFloat(String(v).replace('+', ''));
+  return isNaN(n) ? 0 : n;
+};
+const split = (v) => {
+  const p = String(v || '0-0').split('-');
+  return [num(p[0]), num(p[1])];
+};
+
+function convertPlayers(block) {
+  const out = [];
+  const grp = (block.statistics || [])[0];
+  if (!grp) return out;
+  const keys = grp.keys || [];
+  const ix = (k) => keys.indexOf(k);
+  for (const a of grp.athletes || []) {
+    if (a.didNotPlay || !a.stats || !a.stats.length) continue;
+    const s = (k) => a.stats[ix(k)];
+    const min = num(s('minutes'));
+    const [fgm, fga] = split(s('fieldGoalsMade-fieldGoalsAttempted'));
+    const [tpm, tpa] = split(s('threePointFieldGoalsMade-threePointFieldGoalsAttempted'));
+    const [ftm, fta] = split(s('freeThrowsMade-freeThrowsAttempted'));
+    const full = (a.athlete && (a.athlete.displayName || a.athlete.shortName)) || '';
+    const sp = full.indexOf(' ');
+    out.push({
+      firstName: sp > 0 ? full.slice(0, sp) : full,
+      familyName: sp > 0 ? full.slice(sp + 1) : '',
+      name: full,
+      jerseyNum: (a.athlete && a.athlete.jersey) || '',
+      starter: a.starter ? '1' : '0',
+      statistics: {
+        minutesCalculated: 'PT' + Math.round(min) + 'M00S',
+        points: num(s('points')),
+        fieldGoalsMade: fgm, fieldGoalsAttempted: fga,
+        threePointersMade: tpm, threePointersAttempted: tpa,
+        freeThrowsMade: ftm, freeThrowsAttempted: fta,
+        reboundsTotal: num(s('rebounds')),
+        assists: num(s('assists')),
+        steals: num(s('steals')),
+        blocks: num(s('blocks')),
+        turnovers: num(s('turnovers')),
+        plusMinusPoints: num(s('plusMinus')),
+      },
+    });
+  }
+  return out;
+}
+
+function teamStats(teamEntry, playersBlock) {
+  const m = {};
+  for (const st of (teamEntry && teamEntry.statistics) || []) m[st.name] = st.displayValue;
+  let [fgm, fga] = split(m['fieldGoalsMade-fieldGoalsAttempted']);
+  let [tpm, tpa] = split(m['threePointFieldGoalsMade-threePointFieldGoalsAttempted']);
+  let [ftm, fta] = split(m['freeThrowsMade-freeThrowsAttempted']);
+  const o = {
+    fieldGoalsMade: fgm, fieldGoalsAttempted: fga,
+    threePointersMade: tpm, threePointersAttempted: tpa,
+    freeThrowsMade: ftm, freeThrowsAttempted: fta,
+    reboundsTotal: num(m.totalRebounds), assists: num(m.assists),
+    steals: num(m.steals), blocks: num(m.blocks), turnovers: num(m.turnovers),
+  };
+  // respaldo: sumar jugadores si el equipo no trae stats
+  if (!fga && playersBlock) {
+    const ps = convertPlayers(playersBlock);
+    for (const k of Object.keys(o)) o[k] = ps.reduce((t, p) => t + (p.statistics[k] || 0), 0);
+  }
+  return o;
+}
+
+function convert(sum) {
+  const teams = (sum.boxscore && sum.boxscore.teams) || [];
+  const players = (sum.boxscore && sum.boxscore.players) || [];
+  const comp = (((sum.header || {}).competitions) || [])[0] || {};
+  const build = (abbr) => {
+    const te = teams.find((t) => t.team && t.team.abbreviation === abbr);
+    const pb = players.find((p) => p.team && p.team.abbreviation === abbr);
+    const cc = (comp.competitors || []).find((c) => c.team && c.team.abbreviation === abbr) || {};
+    const t = (te && te.team) || (pb && pb.team) || {};
+    return {
+      teamTricode: tri(abbr),
+      teamCity: t.location || '',
+      teamName: t.name || t.displayName || '',
+      score: num(cc.score),
+      statistics: teamStats(te, pb),
+      players: pb ? convertPlayers(pb) : [],
+    };
+  };
+  const abbrs = teams.map((t) => t.team.abbreviation);
+  const home = (teams.find((t) => t.homeAway === 'home') || teams[0]).team.abbreviation;
+  const away = abbrs.find((a) => a !== home) || abbrs[1];
+  return { game: { gameId: String((sum.header || {}).id || ''), homeTeam: build(home), awayTeam: build(away) } };
+}
+
+async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const id = await findEventId();
+    if (!id) return res.status(404).json({ error: 'No encontré partido de Portland (hoy/últimos días).' });
+    const sum = await getJson(`${BASE}/summary?event=${id}`);
+    if (!sum.boxscore || !(sum.boxscore.players || []).length)
+      return res.status(404).json({ error: 'El partido todavía no tiene box score.' });
+    return res.status(200).json(convert(sum));
+  } catch (e) {
+    return res.status(502).json({ error: String(e.message || e) });
+  }
+}
+
+module.exports = handler;
+module.exports._convert = convert;
