@@ -695,24 +695,25 @@ function copyJugador(){
   const b=document.getElementById('jugCopyBtn');b.textContent='✅ COPIADO';setTimeout(()=>b.textContent='📋 COPIAR',2000);
 }
 
-function openAdmin(){document.getElementById('modalBg').classList.add('open');document.getElementById('loginBox').style.display='block';document.getElementById('adminContent').style.display='none';document.getElementById('pwdInput').value='';document.getElementById('loginErr').style.display='none';}
+function openAdmin(){document.getElementById('modalBg').classList.add('open');document.getElementById('loginBox').style.display='block';document.getElementById('adminContent').style.display='none';document.getElementById('pwdInput').value='';document.getElementById('loginErr').style.display='none';
+  try{if(sessionStorage.getItem('baAdminOk')==='1'){document.getElementById('loginBox').style.display='none';document.getElementById('adminContent').style.display='block';loadAdminUI();}}catch(e){}}
 function closeAdmin(){document.getElementById('modalBg').classList.remove('open');}
-function handleBgClick(e){if(e.target===document.getElementById('modalBg'))closeAdmin();}
+function handleBgClick(e){}
 function checkPwd(){
-  if(document.getElementById('pwdInput').value==='BlazersArgento2026'){document.getElementById('loginBox').style.display='none';document.getElementById('adminContent').style.display='block';loadAdminUI();}
+  if(document.getElementById('pwdInput').value==='BlazersArgento2026'){document.getElementById('loginBox').style.display='none';document.getElementById('adminContent').style.display='block';try{sessionStorage.setItem('baAdminOk','1');}catch(e){}loadAdminUI();}
   else document.getElementById('loginErr').style.display='block';
 }
 let activePTab='1Q';
-function switchPTab(p,btn){activePTab=p;document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');renderPeriodRules(p);}
+function switchPTab(p,btn){autoSaveRules();activePTab=p;document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');renderPeriodRules(p);}
 function renderPeriodRules(p){
   const r=CONFIG.periodRules[p]||{...DEFAULT_PERIOD_RULES};
   document.getElementById('periodRulesWrap').innerHTML=`<div class="rules-grid">
-    <div class="rule-field"><label>PTS mínimo</label><input type="number" id="rMinPTS" value="${r.minPTS||4}"></div>
-    <div class="rule-field"><label>REB mínimo</label><input type="number" id="rREB" value="${r.REB}"></div>
-    <div class="rule-field"><label>AST mínimo</label><input type="number" id="rAST" value="${r.AST}"></div>
-    <div class="rule-field"><label>3PM mínimo</label><input type="number" id="r3PM" value="${r.threepm}"></div>
-    <div class="rule-field"><label>+/- mínimo</label><input type="number" id="rPM" value="${r.pm}"></div>
-    <div class="rule-field"><label>FG% exc</label><input type="number" id="rFG" value="${r.fgPct}"></div>
+    <div class="rule-field"><label>PTS mínimo</label><input type="number" id="rMinPTS" oninput="autoSaveRules()" value="${r.minPTS||4}"></div>
+    <div class="rule-field"><label>REB mínimo</label><input type="number" id="rREB" oninput="autoSaveRules()" value="${r.REB}"></div>
+    <div class="rule-field"><label>AST mínimo</label><input type="number" id="rAST" oninput="autoSaveRules()" value="${r.AST}"></div>
+    <div class="rule-field"><label>3PM mínimo</label><input type="number" id="r3PM" oninput="autoSaveRules()" value="${r.threepm}"></div>
+    <div class="rule-field"><label>+/- mínimo</label><input type="number" id="rPM" oninput="autoSaveRules()" value="${r.pm}"></div>
+    <div class="rule-field"><label>FG% exc</label><input type="number" id="rFG" oninput="autoSaveRules()" value="${r.fgPct}"></div>
   </div>`;
 }
 function loadAdminUI(){renderAdminPlayers();renderPeriodRules(activePTab);}
@@ -720,15 +721,19 @@ function renderAdminPlayers(){
   const list=document.getElementById('adminPlayersList');list.innerHTML='';
   CONFIG.players.forEach((p,i)=>{
     const row=document.createElement('div');row.className='a-player-row';
-    row.innerHTML=`<input type="text" value="${p.last||''}" placeholder="Apellido" onchange="CONFIG.players[${i}].last=this.value;initPlayersGrid()"><input type="text" value="${p.emoji||''}" placeholder="🏀" onchange="CONFIG.players[${i}].emoji=this.value" style="text-align:center"><input type="text" value="${p.num||''}" placeholder="#" onchange="CONFIG.players[${i}].num=this.value;initPlayersGrid()" style="text-align:center"><button class="btn-remove" onclick="removeAdminPlayer(${i})">✕</button>`;
+    row.innerHTML=`<input type="text" value="${p.last||''}" placeholder="Apellido" onchange="CONFIG.players[${i}].last=this.value;saveConfig(CONFIG);initPlayersGrid()">${(p.key&&EMOJI_IMGS[p.key])?`<img src="${EMOJI_IMGS[p.key]}" style="width:30px;height:30px;object-fit:contain;margin:auto;display:block">`:`<input type="text" value="${p.emoji||''}" placeholder="🏀" onchange="CONFIG.players[${i}].emoji=this.value;saveConfig(CONFIG)" style="text-align:center">`}<input type="text" value="${p.num||''}" placeholder="#" onchange="CONFIG.players[${i}].num=this.value;saveConfig(CONFIG);initPlayersGrid()" style="text-align:center"><button class="btn-remove" onclick="removeAdminPlayer(${i})">✕</button>`;
     list.appendChild(row);
   });
 }
-function addAdminPlayer(){CONFIG.players.push({full:'',last:'',emoji:'🏀',num:''});renderAdminPlayers();initPlayersGrid();}
-function removeAdminPlayer(i){CONFIG.players.splice(i,1);renderAdminPlayers();initPlayersGrid();}
-function saveAdmin(){
+function addAdminPlayer(){CONFIG.players.push({full:'',last:'',emoji:'🏀',num:''});saveConfig(CONFIG);renderAdminPlayers();initPlayersGrid();}
+function removeAdminPlayer(i){CONFIG.players.splice(i,1);saveConfig(CONFIG);renderAdminPlayers();initPlayersGrid();}
+function autoSaveRules(){
+  if(!document.getElementById('rMinPTS'))return;
   CONFIG.periodRules[activePTab]={minPTS:parseInt(document.getElementById('rMinPTS').value)||4,REB:parseInt(document.getElementById('rREB').value)||3,AST:parseInt(document.getElementById('rAST').value)||3,threepm:parseInt(document.getElementById('r3PM').value)||3,pm:parseInt(document.getElementById('rPM').value)||10,fgPct:parseFloat(document.getElementById('rFG').value)||62.5};
-  saveConfig(CONFIG);initPlayersGrid();
+  saveConfig(CONFIG);
+}
+function saveAdmin(){
+  autoSaveRules();initPlayersGrid();
   const ok=document.getElementById('saveOk');ok.style.display='block';setTimeout(()=>ok.style.display='none',2000);
 }
 </script>
