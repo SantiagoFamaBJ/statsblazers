@@ -29,15 +29,22 @@ function pick(events) {
 
 async function findEventId() {
   const now = Date.now();
-  const from = ymd(new Date(now - 3 * 864e5));
+  const from = ymd(new Date(now - 10 * 864e5));
   const to = ymd(new Date(now + 864e5));
   try {
-    const sb = await getJson(`${BASE}/scoreboard?dates=${from}-${to}&limit=100`);
+    const sb = await getJson(`${BASE}/scoreboard?dates=${from}-${to}&limit=300`);
     const ev = pick(sb.events || []);
     if (ev) return ev.id;
   } catch (e) { /* sigue al schedule */ }
-  const sch = await getJson(`${BASE}/teams/por/schedule`);
-  const evs = (sch.events || []).filter((e) => {
+  // calendario del equipo: pretemporada (1), temporada regular (2), playoffs (3)
+  let all = [];
+  for (const t of [2, 1, 3]) {
+    try {
+      const sch = await getJson(`${BASE}/teams/por/schedule?seasontype=${t}`);
+      all = all.concat(sch.events || []);
+    } catch (e) { /* ignora */ }
+  }
+  const evs = all.filter((e) => {
     const st = e.competitions && e.competitions[0] && e.competitions[0].status;
     const state = st && st.type && st.type.state;
     return state === 'in' || state === 'post';
